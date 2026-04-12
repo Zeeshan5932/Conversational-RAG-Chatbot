@@ -133,10 +133,10 @@ def web_search(query: str) -> str:
 
     return json.dumps(results, ensure_ascii=False)
 
-
+api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
 def run_agent(user_query: str):
     llm = ChatGroq(
-        groq_api_key=os.getenv("GROQ_API_KEY"),
+        groq_api_key=api_key,
         model_name=model_name,
         temperature=temperature,
     )
