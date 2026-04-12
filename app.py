@@ -10,50 +10,98 @@ load_dotenv()
 
 st.set_page_config(page_title="Conversational RAG Chatbot", page_icon=":satellite:", layout="wide")
 
-st.markdown(
-    """
+st.markdown("""
 <style>
-    :root {
-        --bg-1: #f2efe8;
-        --bg-2: #dce9df;
-        --ink: #132014;
-        --accent: #0d6e4f;
-        --card: rgba(255, 255, 255, 0.72);
-    }
-    .stApp {
-        background: radial-gradient(circle at 10% 10%, var(--bg-2), var(--bg-1) 60%);
-    }
-    .hero {
-        border: 1px solid rgba(19, 32, 20, 0.1);
-        background: var(--card);
-        border-radius: 18px;
-        padding: 1rem 1.2rem;
-        margin-bottom: 0.8rem;
-        backdrop-filter: blur(6px);
-    }
-    .hero h1 {
-        color: var(--ink);
-        margin: 0;
-        font-size: 1.9rem;
-    }
-    .hero p {
-        margin: 0.2rem 0 0;
-        color: #2b3b2d;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
-st.markdown(
-    """
-<div class="hero">
-  <h1>Conversational RAG Chatbot</h1>
-  <p>Ask any question. App fetches live web context, then responds with citations.</p>
-</div>
-""",
-    unsafe_allow_html=True,
-)
+/* ========== ROOT COLORS ========== */
+:root {
+    --bg-1: #0A0F2C;
+    --bg-2: #121a3f;
+    --glass: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #E6EAF2;
+    --accent: #3B82F6;
+}
+
+/* ========== MAIN BACKGROUND ========== */
+.stApp {
+    background: radial-gradient(circle at 20% 20%, #121a3f, #050816 80%);
+}
+
+/* ========== HERO CARD ========== */
+.hero {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.hero h1 {
+    color: white;
+    font-size: 2rem;
+    margin: 0;
+}
+
+.hero p {
+    color: #b8c1ec;
+    margin-top: 4px;
+}
+
+/* ========== CHAT MESSAGES ========== */
+[data-testid="stChatMessage"] {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 10px;
+    color: var(--text);
+}
+
+/* USER MESSAGE ALIGN RIGHT */
+[data-testid="stChatMessage"][data-testid*="user"] {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+/* ========== INPUT BOX ========== */
+[data-testid="stChatInput"] {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+}
+
+/* ========== SIDEBAR ========== */
+section[data-testid="stSidebar"] {
+    background: #050816;
+    border-right: 1px solid var(--border);
+}
+
+/* ========== BUTTONS ========== */
+.stButton button {
+    background: linear-gradient(135deg, #3B82F6, #22D3EE);
+    border: none;
+    color: white;
+    border-radius: 12px;
+}
+
+/* ========== EXPANDER ========== */
+details {
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 8px;
+    border: 1px solid var(--border);
+}
+
+/* REMOVE DEFAULT WHITE BLOCKS */
+.block-container {
+    padding-top: 2rem;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 with st.sidebar:
     st.subheader("Realtime Settings")
