@@ -1,192 +1,192 @@
 import os
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 
 import streamlit as st
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from langchain_groq import ChatGroq
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 load_dotenv()
 
-st.set_page_config(page_title="Conversational RAG Chatbot", page_icon=":satellite:", layout="wide")
+st.set_page_config(
+    page_title="Conversational RAG Chatbot",
+    page_icon=":satellite:",
+    layout="wide"
+)
 
-st.markdown("""
+st.markdown(
+    """
 <style>
+    :root {
+        --bg-1: #0A0F2C;
+        --bg-2: #121a3f;
+        --glass: rgba(255, 255, 255, 0.06);
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #E6EAF2;
+        --accent: #3B82F6;
+    }
 
-/* ========== ROOT COLORS ========== */
-:root {
-    --bg-1: #0A0F2C;
-    --bg-2: #121a3f;
-    --glass: rgba(255, 255, 255, 0.06);
-    --border: rgba(255, 255, 255, 0.08);
-    --text: #E6EAF2;
-    --accent: #3B82F6;
-}
+    .stApp {
+        background: radial-gradient(circle at 20% 20%, #121a3f, #050816 80%);
+    }
 
-/* ========== MAIN BACKGROUND ========== */
-.stApp {
-    background: radial-gradient(circle at 20% 20%, #121a3f, #050816 80%);
-}
+    .hero {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        backdrop-filter: blur(12px);
+        border-radius: 20px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+    }
 
-/* ========== HERO CARD ========== */
-.hero {
-    background: var(--glass);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(12px);
-    border-radius: 20px;
-    padding: 1.2rem;
-    margin-bottom: 1rem;
-}
+    .hero h1 {
+        color: white;
+        font-size: 2rem;
+        margin: 0;
+    }
 
-.hero h1 {
-    color: white;
-    font-size: 2rem;
-    margin: 0;
-}
+    .hero p {
+        color: #b8c1ec;
+        margin-top: 4px;
+    }
 
-.hero p {
-    color: #b8c1ec;
-    margin-top: 4px;
-}
+    [data-testid="stChatMessage"] {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 14px;
+        margin-bottom: 10px;
+        color: var(--text);
+    }
 
-/* ========== CHAT MESSAGES ========== */
-[data-testid="stChatMessage"] {
-    background: var(--glass);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(10px);
-    border-radius: 16px;
-    padding: 14px;
-    margin-bottom: 10px;
-    color: var(--text);
-}
+    section[data-testid="stSidebar"] {
+        background: #050816;
+        border-right: 1px solid var(--border);
+    }
 
-/* USER MESSAGE ALIGN RIGHT */
-[data-testid="stChatMessage"][data-testid*="user"] {
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.25);
-}
-
-/* ========== INPUT BOX ========== */
-[data-testid="stChatInput"] {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 14px;
-    border: 1px solid var(--border);
-}
-
-/* ========== SIDEBAR ========== */
-section[data-testid="stSidebar"] {
-    background: #050816;
-    border-right: 1px solid var(--border);
-}
-
-/* ========== BUTTONS ========== */
-.stButton button {
-    background: linear-gradient(135deg, #3B82F6, #22D3EE);
-    border: none;
-    color: white;
-    border-radius: 12px;
-}
-
-/* ========== EXPANDER ========== */
-details {
-    background: rgba(255,255,255,0.03);
-    border-radius: 12px;
-    padding: 8px;
-    border: 1px solid var(--border);
-}
-
-/* REMOVE DEFAULT WHITE BLOCKS */
-.block-container {
-    padding-top: 2rem;
-}
-
+    .block-container {
+        padding-top: 2rem;
+    }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+<div class="hero">
+  <h1>Conversational RAG Chatbot</h1>
+  <p>Ask any question. The assistant can search the web in real time when needed.</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.subheader("Realtime Settings")
-    model_name = st.selectbox("Model", ["llama-3.1-8b-instant", "llama-3.1-70b-versatile"], index=0)
-    temperature = st.slider("Creativity", min_value=0.0, max_value=1.0, value=0.3, step=0.1)
-    max_sources = st.slider("Max web sources", min_value=3, max_value=10, value=6, step=1)
-    st.caption("Tip: lower creativity gives more factual style answers.")
+    model_name = st.selectbox(
+        "Model",
+        ["llama-3.1-8b-instant", "llama-3.1-70b-versatile"],
+        index=0
+    )
+    temperature = st.slider("Creativity", 0.0, 1.0, 0.3, 0.1)
+    max_sources = st.slider("Max web sources", 3, 10, 6, 1)
+    st.caption("Lower creativity usually gives more factual answers.")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {
-            "role": "assistant",
-            "content": "Hi! I can answer general questions and fetch latest info from the web.",
-            "sources": [],
-        }
+        {"role": "assistant", "content": "Hi! Ask me anything — I can search live web data when needed."}
     ]
 
 
-def fetch_live_results(query: str, limit: int) -> list[dict]:
+@tool
+def web_search(query: str) -> str:
+    """Search the web for real-time information and return concise results with title, snippet, and URL."""
     results = []
-    seen_links = set()
+    seen = set()
+
     search_queries = [query, f"{query} latest update"]
 
     for q in search_queries:
         try:
             with DDGS() as ddgs:
-                for item in ddgs.text(q, max_results=limit):
-                    link = item.get("href", "").strip()
-                    if not link or link in seen_links:
+                for item in ddgs.text(q, max_results=max_sources):
+                    url = (item.get("href") or "").strip()
+                    if not url or url in seen:
                         continue
-                    seen_links.add(link)
-                    results.append(
-                        {
-                            "title": item.get("title", "Untitled"),
-                            "snippet": item.get("body", ""),
-                            "url": link,
-                        }
-                    )
-                    if len(results) >= limit:
-                        return results
+                    seen.add(url)
+
+                    results.append({
+                        "title": item.get("title", "Untitled"),
+                        "snippet": item.get("body", ""),
+                        "url": url
+                    })
+
+                    if len(results) >= max_sources:
+                        return json.dumps(results, ensure_ascii=False)
         except Exception:
             continue
 
-    return results
+    return json.dumps(results, ensure_ascii=False)
 
 
-def build_context(sources: list[dict]) -> str:
-    if not sources:
-        return "No live web sources were found."
-
-    chunks = []
-    for idx, src in enumerate(sources, start=1):
-        chunks.append(
-            f"[{idx}] Title: {src['title']}\n"
-            f"URL: {src['url']}\n"
-            f"Snippet: {src['snippet']}"
-        )
-    return "\n\n".join(chunks)
-
-
-def answer_query(query: str, sources: list[dict]) -> str:
-    client = ChatGroq(
+def run_agent(user_query: str):
+    llm = ChatGroq(
         groq_api_key=os.getenv("GROQ_API_KEY"),
         model_name=model_name,
         temperature=temperature,
     )
 
+    llm_with_tools = llm.bind_tools([web_search])
+
     today = datetime.now().strftime("%Y-%m-%d")
-    context_text = build_context(sources)
 
-    prompt = (
-        "You are a factual assistant with web context.\n"
-        f"Today's date: {today}\n"
-        "Rules:\n"
-        "1) Use provided web sources for real-time or factual claims.\n"
-        "2) If data is uncertain or sources are weak, clearly mention uncertainty.\n"
-        "3) For prices/rates, include currency/unit and mention that values can change quickly.\n"
-        "4) Cite source numbers like [1], [2] where relevant.\n\n"
-        f"User query: {query}\n\n"
-        f"Web context:\n{context_text}\n\n"
-        "Provide a clear answer first, then a short 'Sources used' line with citation numbers."
-    )
+    system_prompt = f"""
+You are a helpful factual assistant.
 
-    response = client.invoke(prompt)
-    return response.content
+Today's date: {today}
+
+Rules:
+1. Use the web_search tool whenever the user asks for recent, live, changing, or factual information.
+2. If the answer is stable general knowledge, you may answer directly.
+3. When tool results are used, cite them inline like [1], [2].
+4. After the answer, add a short section called 'Sources'.
+5. If the web results are weak or uncertain, say so clearly.
+"""
+
+    messages = [
+        HumanMessage(content=system_prompt),
+        HumanMessage(content=user_query),
+    ]
+
+    first_response = llm_with_tools.invoke(messages)
+
+    collected_sources = []
+
+    if getattr(first_response, "tool_calls", None):
+        tool_messages = []
+
+        for tool_call in first_response.tool_calls:
+            if tool_call["name"] == "web_search":
+                tool_result = web_search.invoke(tool_call["args"])
+                parsed = json.loads(tool_result) if tool_result else []
+                collected_sources.extend(parsed)
+
+                tool_messages.append(
+                    ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+
+        final_response = llm_with_tools.invoke(messages + [first_response] + tool_messages)
+        return final_response.content, collected_sources
+
+    return first_response.content, collected_sources
 
 
 for msg in st.session_state["messages"]:
@@ -194,32 +194,32 @@ for msg in st.session_state["messages"]:
         st.markdown(msg["content"])
         if msg.get("sources"):
             with st.expander("View web sources"):
-                for idx, src in enumerate(msg["sources"], start=1):
-                    st.markdown(f"{idx}. [{src['title']}]({src['url']})")
-                    if src["snippet"]:
+                for i, src in enumerate(msg["sources"], start=1):
+                    st.markdown(f"{i}. [{src['title']}]({src['url']})")
+                    if src.get("snippet"):
                         st.caption(src["snippet"])
 
 
-query = st.chat_input("Ask anything: petrol price, sports score, news, weather, coding, facts...")
+query = st.chat_input("Ask anything: news, sports, weather, prices, coding, facts...")
 
 if query:
-    st.session_state["messages"].append({"role": "user", "content": query, "sources": []})
+    st.session_state["messages"].append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.markdown(query)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching live web and generating answer..."):
-            sources = fetch_live_results(query, max_sources)
-            final_answer = answer_query(query, sources)
+        with st.spinner("Thinking and searching the web if needed..."):
+            answer, sources = run_agent(query)
 
-        st.markdown(final_answer)
+        st.markdown(answer)
+
         if sources:
             with st.expander("View web sources"):
-                for idx, src in enumerate(sources, start=1):
-                    st.markdown(f"{idx}. [{src['title']}]({src['url']})")
-                    if src["snippet"]:
+                for i, src in enumerate(sources, start=1):
+                    st.markdown(f"{i}. [{src['title']}]({src['url']})")
+                    if src.get("snippet"):
                         st.caption(src["snippet"])
 
     st.session_state["messages"].append(
-        {"role": "assistant", "content": final_answer, "sources": sources}
+        {"role": "assistant", "content": answer, "sources": sources}
     )
