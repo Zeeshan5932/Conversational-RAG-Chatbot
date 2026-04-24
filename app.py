@@ -7,7 +7,7 @@ import streamlit as st
 from ddgs import DDGS
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 
 load_dotenv()
 
@@ -133,7 +133,22 @@ def web_search(query: str) -> str:
 
     return json.dumps(results, ensure_ascii=False)
 
-api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
+def get_api_key() -> str | None:
+    try:
+        return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        return os.getenv("GROQ_API_KEY")
+
+
+api_key = get_api_key()
+
+if not api_key:
+    st.error(
+        "GROQ_API_KEY is missing. Add it to your .env file or create .streamlit/secrets.toml."
+    )
+    st.stop()
+
+
 def run_agent(user_query: str):
     llm = ChatGroq(
         groq_api_key=api_key,
@@ -159,7 +174,7 @@ Rules:
 """
 
     messages = [
-        HumanMessage(content=system_prompt),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=user_query),
     ]
 
