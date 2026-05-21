@@ -37,13 +37,13 @@ cd Conversational-RAG-Chatbot
 
 ## Setup and Installation
 
-1. Create virtual environment:
+1. Create a virtual environment:
 
 ```bash
 python -m venv .venv
 ```
 
-2. Activate virtual environment:
+2. Activate the virtual environment:
 
 Windows (PowerShell):
 
@@ -60,19 +60,25 @@ source .venv/bin/activate
 3. Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ## Environment Variables
 
-Create a `.env` file in project root:
+Create a `.env` file in the project root with:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 ```
 
+If you prefer Streamlit secrets, you can also store the key in `.streamlit/secrets.toml`:
+
+```toml
+GROQ_API_KEY = "your_groq_api_key_here"
+```
+
 Important:
-- Never commit `.env` to GitHub.
+- Never commit `.env` or `.streamlit/secrets.toml` to GitHub.
 - Regenerate keys immediately if exposed.
 
 ## Run the App
@@ -81,7 +87,15 @@ Important:
 streamlit run app.py
 ```
 
-Then open the local URL shown in terminal (usually `http://localhost:8501`).
+Then open the local URL shown in the terminal (usually `http://localhost:8501`).
+
+## Quick Test
+
+After installing dependencies, you can verify the app imports correctly with:
+
+```bash
+python -m py_compile app.py
+```
 
 ## Usage
 
