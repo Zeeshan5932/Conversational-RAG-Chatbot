@@ -57,6 +57,10 @@ macOS/Linux:
 source .venv/bin/activate
 ```
 
+Important:
+- Use the `.venv` folder shown above.
+- If you have an older `venv` folder, do not activate that one.
+
 3. Install dependencies:
 
 ```bash
