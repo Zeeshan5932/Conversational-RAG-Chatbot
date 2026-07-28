@@ -1,125 +1,213 @@
-# Conversational RAG Chatbot
+Here is the complete, comprehensive `README.md` file tailored specifically to your project's architecture, including all 10 implementation phases, full feature breakdowns, environment setup, and instructions for running FastAPI and Streamlit both separately and together.
 
-A simple conversational chatbot built with Streamlit, LangChain, and Groq.
+---
 
-## Features
+### `README.md`
 
-- Clean Streamlit chat UI
-- Conversation memory during session
-- Fast LLM responses using Groq (`llama-3.1-8b-instant`)
-- Environment-based API key loading via `.env`
+```markdown
+# 🤖 Multi-Agent RAG & Live Web Research Assistant
 
-## Tech Stack
+An enterprise-grade, stateful multi-agent research system built with **LangGraph**, **Google Gemini 2.5**, **ChromaDB**, **FastAPI**, **Tavily**, **Firecrawl**, and **Streamlit**.
 
-- Python
-- Streamlit
-- LangChain
-- langchain-groq
-- python-dotenv
+The system dynamically classifies user intent into distinct specialized processing nodes—from local vector retrieval and real-time live web search to deep URL content analysis and hybrid synthesis—while maintaining persistent conversation memory using stateful checkpointers.
 
-## Project Structure
+---
+
+## 🌟 Key Features
+
+- **Intelligent Query Routing**: Classifies queries using structured Pydantic outputs into 5 execution paths:
+  1. `general_llm`: Direct reasoning via Gemini 2.5 without tool retrieval.
+  2. `rag`: Local document retrieval over vector embeddings stored in ChromaDB.
+  3. `web_search`: Live internet search and citations powered by Tavily API.
+  4. `url_research`: Direct web page scraping and content extraction (Firecrawl with BeautifulSoup fallback).
+  5. `hybrid`: Simultaneous execution of internal document retrieval and external live web search.
+- **Stateful Thread Memory**: Multi-turn conversation persistence across chat sessions powered by LangGraph `MemorySaver`.
+- **Citations & Attribution**: Structured source tracking returning document metadata (source file, page numbers) and web URLs.
+- **Modular Frontend**: Decoupled Streamlit frontend architecture (`frontend/streamlit_app.py` and UI components).
+- **RESTful API**: Production-ready FastAPI backend with OpenAPI documentation and CORS support.
+- **Containerized Deployment**: Ready-to-use `Dockerfile` and `docker-compose.yml`.
+
+---
+
+## 📂 Project Structure
 
 ```text
-.
-|-- app.py
-|-- requirements.txt
-|-- README.md
-|-- LICENSE
-`-- .gitignore
+├── app/
+│   ├── agents/
+│   │   ├── graph.py         # StateGraph build & MemorySaver checkpointer
+│   │   ├── nodes.py         # Agent execution nodes (RAG, Web, URL, Hybrid, General)
+│   │   ├── router.py        # Query routing logic using Gemini structured outputs
+│   │   └── state.py         # AgentState TypedDict schema
+│   ├── api/
+│   │   └── routes.py        # FastAPI API endpoints (/chat, /documents/upload, /health)
+│   ├── config.py            # Pydantic settings & environment configuration
+│   ├── llm/
+│   │   └── gemini.py        # Gemini 2.5 LLM initializer
+│   ├── rag/
+│   │   ├── loader.py        # Document loading (PDF, DOCX, TXT)
+│   │   ├── retriever.py     # ChromaDB similarity retriever
+│   │   └── vectorstore.py   # VectorStore lifecycle management
+│   ├── services/
+│   │   ├── chat_service.py  # LangGraph graph execution wrapper
+│   │   └── document_service.py # Document ingestion pipeline service
+│   ├── tools/
+│   │   ├── url_reader.py    # URL scraping (Firecrawl / BeautifulSoup fallback)
+│   │   └── web_search.py    # Tavily web search wrapper
+│   └── main.py              # FastAPI application initialization
+├── frontend/
+│   ├── components/
+│   │   ├── __init__.py
+│   │   ├── chat.py          # Chat message history & user input rendering
+│   │   ├── sidebar.py       # Knowledge base upload & operations panel
+│   │   └── sources.py       # Expandable citation & reference block
+│   └── streamlit_app.py     # Streamlit entry point
+├── tests/
+│   └── test_agent.py        # Unit and integration test suite
+├── .env.example             # Template environment variables
+├── Dockerfile               # Production container definition
+├── docker-compose.yml       # Multi-container service definition
+├── requirements.txt         # Python dependencies
+└── run.py                   # Unified launcher script (FastAPI + Streamlit)
+
 ```
 
-## Clone This Repository
+---
+
+## 🛠️ Prerequisites & Setup
+
+### 1. Clone Repository & Create Virtual Environment
 
 ```bash
-git clone https://github.com/Zeeshan5932/Conversational-RAG-Chatbot.git
-cd Conversational-RAG-Chatbot
+git clone [https://github.com/your-username/multi-agent-rag.git](https://github.com/your-username/multi-agent-rag.git)
+cd multi-agent-rag
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
+
 ```
 
-## Setup and Installation
-
-1. Create a virtual environment:
+### 2. Install Dependencies
 
 ```bash
-python -m venv .venv
+pip install --upgrade pip
+pip install -r requirements.txt
+
 ```
 
-2. Activate the virtual environment:
+### 3. Configure Environment Variables
 
-Windows (PowerShell):
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Important:
-- Use the `.venv` folder shown above.
-- If you have an older `venv` folder, do not activate that one.
-
-3. Install dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-## Environment Variables
-
-Create a `.env` file in the project root with:
+Create a `.env` file in the project root directory:
 
 ```env
-GROQ_API_KEY=your_groq_api_key_here
+# Core API Keys
+GEMINI_API_KEY=your_actual_gemini_api_key
+TAVILY_API_KEY=your_actual_tavily_api_key
+
+# Optional API Keys
+FIRECRAWL_API_KEY=your_optional_firecrawl_api_key
+
+# Application Settings
+APP_ENV=development
+LOG_LEVEL=INFO
+GEMINI_MODEL=gemini-2.5-flash
+CHROMA_PERSIST_DIR=./chroma_db
+UPLOAD_DIR=./uploads
+
 ```
 
-If you prefer Streamlit secrets, you can also store the key in `.streamlit/secrets.toml`:
+---
 
-```toml
-GROQ_API_KEY = "your_groq_api_key_here"
-```
+## 🚀 How to Run the Application
 
-Important:
-- Never commit `.env` or `.streamlit/secrets.toml` to GitHub.
-- Regenerate keys immediately if exposed.
+You can run the backend and frontend together, separately, or via Docker.
 
-## Run the App
+### Option A: Run Both Together (Unified Launcher)
+
+The `run.py` script starts the FastAPI backend and Streamlit UI in parallel:
 
 ```bash
-streamlit run app.py
+python run.py
+
 ```
 
-Then open the local URL shown in the terminal (usually `http://localhost:8501`).
+* **Streamlit Web UI**: [http://localhost:8501](http://localhost:8501)
+* **FastAPI Backend**: [http://localhost:8000](http://localhost:8000)
+* **Interactive API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## Quick Test
+---
 
-After installing dependencies, you can verify the app imports correctly with:
+### Option B: Run Services Separately
+
+If you prefer to run and debug the backend and frontend in separate terminal windows:
+
+#### Terminal 1: Run FastAPI Backend
 
 ```bash
-python -m py_compile app.py
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
 ```
 
-## Usage
-
-1. Type your query in input box.
-2. Click `Submit`.
-3. Read AI response in app.
-
-## Git Workflow (Quick)
+#### Terminal 2: Run Streamlit Frontend
 
 ```bash
-git add .
-git commit -m "Update project"
-git push origin main
+streamlit run frontend/streamlit_app.py --server.port 8501
+
 ```
 
-## License
+---
 
-This project is licensed under MIT. See `LICENSE` for details.
+### Option C: Run via Docker Compose
 
-## Maintainer
+To build and launch the entire application stack in isolated containers:
 
-- GitHub: https://github.com/Zeeshan5932
+```bash
+# Build and start services
+docker-compose up --build
 
+# Run in detached mode
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+```
+
+---
+
+## 📡 API Reference & Endpoints
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/api/v1/health` | `GET` | Health check verifying model configuration and system status. |
+| `/api/v1/documents/upload` | `POST` | Ingests PDF, DOCX, or TXT files into the ChromaDB vector database. |
+| `/api/v1/chat` | `POST` | Main endpoint executing user queries through the stateful LangGraph engine. |
+| `/api/v1/research/url` | `POST` | Direct webpage content extraction and preview endpoint. |
+
+### Sample Chat Payload (`POST /api/v1/chat`)
+
+```json
+{
+  "message": "What are the latest developments in AI in 2026?",
+  "thread_id": "session_abc123"
+}
+
+```
+
+---
+
+## 🧪 Testing
+
+Run unit and integration tests using `pytest`:
+
+```bash
+pytest tests/ -v
+
+`
+
+```

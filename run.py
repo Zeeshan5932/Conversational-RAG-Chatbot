@@ -1,30 +1,28 @@
 import subprocess
-import sys
 import time
+import sys
+import uvicorn
 
 
 def main():
-    print("Starting AI Research Assistant services...")
+    """Launches FastAPI backend server and Streamlit UI process concurrently."""
+    print("🚀 Starting Multi-Agent AI System...")
     
-    # Start FastAPI Backend
-    backend_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    )
+    # Launch Streamlit process
+    streamlit_cmd = [
+        sys.executable, "-m", "streamlit", "run", "app/ui/app.py",
+        "--server.port=8501", "--server.address=0.0.0.0"
+    ]
+    streamlit_process = subprocess.Popen(streamlit_cmd)
     
-    time.sleep(2)  # Give backend time to spin up
-    
-    # Start Streamlit Frontend
-    frontend_process = subprocess.Popen(
-        [sys.executable, "-m", "streamlit", "run", "frontend/streamlit_app.py"]
-    )
+    print("✨ Streamlit UI running on http://localhost:8501")
+    print("⚡ Starting FastAPI Backend on http://localhost:8000")
     
     try:
-        backend_process.wait()
-        frontend_process.wait()
+        uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
     except KeyboardInterrupt:
-        print("\nShutting down services...")
-        backend_process.terminate()
-        frontend_process.terminate()
+        print("\n🛑 Shutting down services...")
+        streamlit_process.terminate()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,14 @@
+import sys
+from pathlib import Path
+
+# Add project root directory to Python path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+
 import streamlit as st
-import requests
 import os
+from frontend.components.sidebar import render_sidebar
+from frontend.components.chat import render_chat_interface
 
 st.set_page_config(
     page_title="AI Research Assistant",
@@ -13,19 +21,9 @@ st.caption("Conversational RAG & Web Search Engine")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-# Sidebar Configuration
-with st.sidebar:
-    st.header("System Status")
-    try:
-        response = requests.get(f"{BACKEND_URL}/api/v1/health", timeout=3)
-        if response.status_code == 200:
-            data = response.json()
-            st.success("Backend Connected")
-            st.json(data)
-        else:
-            st.error("Backend unreachable")
-    except Exception as e:
-        st.error(f"Failed to connect to backend: {e}")
-
+# Render Sidebar Component
+render_sidebar(BACKEND_URL)
+# Render Interactive Chat Interface
+render_chat_interface(BACKEND_URL)
 st.divider()
-st.info("Phase 1 initialization complete. Backend API and baseline UI active.")
+st.info("Phase 2 complete: Document parsing, chunking, Gemini Embeddings, and ChromaDB indexing active.")
