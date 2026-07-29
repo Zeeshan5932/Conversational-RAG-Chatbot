@@ -22,8 +22,8 @@ def render_sidebar(backend_url: str):
         # File Upload Section
         st.subheader("📄 Upload Knowledge Base Document")
         uploaded_file = st.file_uploader(
-            "Upload PDF, DOCX, or TXT",
-            type=["pdf", "docx", "txt"],
+            "Upload PDF, DOCX, TXT, PPT, or PPTX",
+            type=["pdf", "docx", "txt","ppt", "pptx"],
             help="Uploaded documents will be chunked and indexed into ChromaDB for RAG retrieval."
         )
 
