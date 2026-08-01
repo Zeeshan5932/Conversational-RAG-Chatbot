@@ -1,224 +1,269 @@
-from typing import Dict, Any
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+"""Execution nodes for the research assistant graph."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
 from app.agents.state import AgentState
-from app.agents.router import QueryRouter
-from app.llm.gemini import get_gemini_llm
-from app.rag.vectorstore import VectorStoreManager
+from app.llm.groq import get_llm
 from app.rag.retriever import DocumentRetriever
-from app.tools.web_search import WebSearchTool
+from app.rag.vectorstore import VectorStoreManager
 from app.tools.url_reader import URLReaderTool, extract_url_from_text
+from app.tools.web_search import WebSearchTool
+from app.utils.citations import build_citation, dedupe_citations
 from app.utils.logger import logger
 
-router_instance = QueryRouter()
-llm = get_gemini_llm(temperature=0.3)
+
 web_search_tool = WebSearchTool(max_results=5)
 url_reader_tool = URLReaderTool()
 
 
-def router_node(state: AgentState) -> Dict[str, Any]:
-    """Graph node that evaluates the user query and assigns the route decision."""
-    query = state["user_query"]
-    decision = router_instance.route_query(query)
-    return {"route_decision": decision.route}
+def _query_from_state(state: AgentState) -> str:
+    return (state.get("query") or state.get("user_query") or "").strip()
 
 
-def general_llm_node(state: AgentState) -> Dict[str, Any]:
-    """Handles general questions directly via Gemini without tool search."""
-    logger.info("Executing general_llm_node...")
-    messages = state.get("messages", [])
-    if not messages or not isinstance(messages[-1], HumanMessage):
-        messages.append(HumanMessage(content=state["user_query"]))
+def _append_context(state: AgentState, **updates: Any) -> Dict[str, Any]:
+    context = dict(state.get("context", {}))
+    context.update(updates)
+    return context
 
-    response = llm.invoke(messages)
+
+def _error_message(message: str, route: str) -> Dict[str, Any]:
     return {
-        "messages": [response],
-        "final_answer": response.content
+        "messages": [AIMessage(content=message)],
+        "final_answer": message,
+        "route": route,
+        "route_decision": route,
+        "context": {"error": message},
     }
 
 
 def rag_node(state: AgentState) -> Dict[str, Any]:
-    """Retrieves relevant chunks from ChromaDB and synthesizes an answer."""
-    logger.info("Executing rag_node...")
-    query = state["user_query"]
-    
-    vector_store_mgr = VectorStoreManager()
-    retriever = DocumentRetriever(vector_store_mgr, k=4)
-    docs = retriever.retrieve(query)
-    
-    formatted_context = ""
-    retrieved_docs_metadata = []
-    
-    for idx, doc in enumerate(docs, start=1):
-        source = doc.metadata.get("source_file", "unknown")
-        page = doc.metadata.get("page", 1)
-        formatted_context += f"\n--- Document [{idx}] ({source}, Page {page}) ---\n{doc.page_content}\n"
-        retrieved_docs_metadata.append({
-            "source": source,
-            "page": page,
-            "content": doc.page_content[:200]
-        })
+    """Retrieve internal documents and prepare grounded context for synthesis."""
+    logger.info("Executing rag_node")
+    query = _query_from_state(state)
 
-    system_prompt = (
-        "You are an accurate research assistant. Answer the user question based strictly on "
-        "the provided document context below. If the context does not contain enough information, "
-        "clearly state that context is insufficient.\n\n"
-        f"Context:\n{formatted_context}"
+    try:
+        vector_store_mgr = VectorStoreManager()
+        retriever = DocumentRetriever(vector_store_mgr, k=4)
+        docs = retriever.retrieve(query)
+    except Exception as exc:
+        logger.exception("RAG retrieval failed: %s", exc)
+        return _error_message(
+            "I could not access the document index right now. Please check the embedding and ChromaDB configuration.",
+            "rag",
+        )
+
+    formatted_context: List[str] = []
+    retrieved_docs: List[Dict[str, Any]] = []
+    citations: List[Dict[str, Any]] = []
+
+    for index, doc in enumerate(docs, start=1):
+        source = doc.metadata.get("source_file") or doc.metadata.get("source") or "unknown"
+        page = doc.metadata.get("page")
+        formatted_context.append(
+            f"[Document {index}] Source: {source} | Page: {page if page is not None else 'n/a'}\n{doc.page_content}"
+        )
+        retrieved_docs.append(
+            {
+                "source": source,
+                "page": page,
+                "content": doc.page_content[:500],
+            }
+        )
+        citations.append(build_citation(url="", source=source, page=page))
+
+    context_text = "\n\n".join(formatted_context)
+    context = _append_context(
+        state,
+        mode="rag",
+        documents=[
+            {
+                "source": item["source"],
+                "page": item["page"],
+                "content": item["content"],
+            }
+            for item in retrieved_docs
+        ],
+        context_text=context_text,
     )
-    
-    prompt_messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
-    
-    response = llm.invoke(prompt_messages)
-    
+
     return {
-        "messages": [response],
-        "final_answer": response.content,
-        "retrieved_docs": retrieved_docs_metadata
+        "query": query,
+        "route": "rag",
+        "route_decision": "rag",
+        "retrieved_docs": retrieved_docs,
+        "citations": dedupe_citations(citations),
+        "context": context,
     }
 
 
 def web_search_node(state: AgentState) -> Dict[str, Any]:
-    """Queries live web data via Tavily and synthesizes a grounded answer with citations."""
-    logger.info("Executing web_search_node...")
-    query = state["user_query"]
-    
+    """Retrieve live web results and prepare grounded context for synthesis."""
+    logger.info("Executing web_search_node")
+    query = _query_from_state(state)
+
+    if not web_search_tool.api_key:
+        message = "TAVILY_API_KEY is not configured, so live web search is unavailable."
+        logger.warning(message)
+        return _error_message(message, "web_search")
+
     search_results = web_search_tool.search(query)
-    
     if not search_results:
-        msg = "Unable to retrieve real-time web results (API key missing or search returned no results)."
+        message = "No live web results were returned for the query."
         return {
-            "final_answer": msg,
-            "messages": [AIMessage(content=msg)],
-            "search_results": []
+            "messages": [AIMessage(content=message)],
+            "final_answer": message,
+            "route": "web_search",
+            "route_decision": "web_search",
+            "search_results": [],
+            "context": _append_context(state, mode="web_search", web_results=[], context_text=""),
         }
 
-    formatted_search_context = ""
-    citations = []
-    
-    for idx, res in enumerate(search_results, start=1):
-        title = res.get("title", "No Title")
-        url = res.get("url", "")
-        snippet = res.get("content", "")
-        formatted_search_context += f"\n--- Web Source [{idx}]: {title} ({url}) ---\n{snippet}\n"
-        citations.append({"title": title, "url": url})
+    formatted_context: List[str] = []
+    citations: List[Dict[str, Any]] = []
 
-    system_prompt = (
-        "You are an AI Web Research Assistant. Synthesize a comprehensive and factual response "
-        "to the user query using the live web search results below. Always attribute key claims "
-        "using inline numbers corresponding to the web sources (e.g., [1], [2]).\n\n"
-        f"Live Web Search Results:\n{formatted_search_context}"
+    for index, result in enumerate(search_results, start=1):
+        title = result.get("title", "No Title")
+        url = result.get("url", "")
+        snippet = result.get("content", "")
+        formatted_context.append(f"[Web {index}] {title}\nURL: {url}\n{snippet}")
+        citations.append(build_citation(url=url, source=title, page=None))
+
+    context = _append_context(
+        state,
+        mode="web_search",
+        web_results=search_results,
+        context_text="\n\n".join(formatted_context),
     )
 
-    prompt_messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
-
-    response = llm.invoke(prompt_messages)
-
     return {
-        "messages": [response],
-        "final_answer": response.content,
+        "query": query,
+        "route": "web_search",
+        "route_decision": "web_search",
         "search_results": search_results,
-        "citations": citations
+        "citations": dedupe_citations(citations),
+        "context": context,
     }
 
 
-def url_research_node(state: AgentState) -> Dict[str, Any]:
-    """Extracts URL content from target page and summarizes or answers user query."""
-    logger.info("Executing url_research_node...")
-    query = state["user_query"]
+def url_reader_node(state: AgentState) -> Dict[str, Any]:
+    """Read a URL from the query and prepare the page content for synthesis."""
+    logger.info("Executing url_reader_node")
+    query = _query_from_state(state)
     target_url = extract_url_from_text(query)
 
     if not target_url:
-        msg = "No valid URL found in your query. Please provide a full URL (e.g., https://example.com)."
-        return {"final_answer": msg, "messages": [AIMessage(content=msg)]}
+        message = "No valid URL was found in the query. Please include a full http:// or https:// link."
+        return _error_message(message, "url_reader")
 
-    url_data = url_reader_tool.read_url(target_url)
-    
-    if "Error" in url_data["title"] or not url_data["content"]:
-        msg = f"Failed to retrieve content from {target_url}: {url_data['content']}"
-        return {"final_answer": msg, "messages": [AIMessage(content=msg)]}
+    try:
+        url_data = url_reader_tool.read_url(target_url)
+    except Exception as exc:
+        logger.exception("URL reading failed: %s", exc)
+        return _error_message(f"Failed to read the provided URL: {exc}", "url_reader")
 
-    system_prompt = (
-        "You are a webpage content analyst. Analyze the provided webpage content and "
-        "answer the user query accurately. Always cite the URL as the primary source.\n\n"
-        f"URL: {url_data['url']}\n"
-        f"Page Title: {url_data['title']}\n"
-        f"Webpage Content:\n{url_data['content']}"
+    if url_data.get("method") == "error" or not url_data.get("content"):
+        message = f"Failed to retrieve content from {target_url}: {url_data.get('content', 'No content returned.') }"
+        return _error_message(message, "url_reader")
+
+    citations = [build_citation(url=url_data.get("url", target_url), source=url_data.get("title", target_url), page=None)]
+    context = _append_context(
+        state,
+        mode="url_reader",
+        url_data=url_data,
+        context_text=url_data.get("content", ""),
     )
 
-    prompt_messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
-
-    response = llm.invoke(prompt_messages)
-
     return {
-        "messages": [response],
-        "final_answer": response.content,
-        "url_content": url_data["content"],
-        "citations": [{"title": url_data["title"], "url": url_data["url"]}]
+        "query": query,
+        "route": "url_reader",
+        "route_decision": "url_reader",
+        "url_content": url_data.get("content", ""),
+        "citations": dedupe_citations(citations),
+        "context": context,
     }
 
 
-def hybrid_node(state: AgentState) -> Dict[str, Any]:
-    """Executes local vector store search and web search in parallel to form combined context."""
-    logger.info("Executing hybrid_node (Document RAG + Live Web Search)...")
-    query = state["user_query"]
+def general_llm_node(state: AgentState) -> Dict[str, Any]:
+    """Handle general requests without retrieval."""
+    logger.info("Executing general_llm_node")
+    query = _query_from_state(state)
 
-    # 1. Internal Vector RAG Retrieval
-    vector_store_mgr = VectorStoreManager()
-    retriever = DocumentRetriever(vector_store_mgr, k=3)
-    docs = retriever.retrieve(query)
+    try:
+        llm = get_llm()
+        messages = list(state.get("messages", []))
+        if not messages or not isinstance(messages[-1], HumanMessage):
+            messages.append(HumanMessage(content=query))
 
-    formatted_doc_context = ""
-    retrieved_docs_metadata = []
-    for idx, doc in enumerate(docs, start=1):
-        source = doc.metadata.get("source_file", "unknown")
-        page = doc.metadata.get("page", 1)
-        formatted_doc_context += f"\n--- Internal Document [{idx}] ({source}, Page {page}) ---\n{doc.page_content}\n"
-        retrieved_docs_metadata.append({
-            "source": source,
-            "page": page,
-            "content": doc.page_content[:200]
-        })
+        response = llm.invoke(messages)
+    except Exception as exc:
+        logger.exception("General LLM call failed: %s", exc)
+        return _error_message("The chat model is currently unavailable.", "general")
 
-    # 2. Live Web Search Retrieval
-    search_results = web_search_tool.search(query)
-    formatted_web_context = ""
-    citations = []
-    for idx, res in enumerate(search_results, start=1):
-        title = res.get("title", "No Title")
-        url = res.get("url", "")
-        snippet = res.get("content", "")
-        formatted_web_context += f"\n--- External Web Source [{idx}]: {title} ({url}) ---\n{snippet}\n"
-        citations.append({"title": title, "url": url})
-
-    # 3. Combine Contexts and Prompt Gemini
-    system_prompt = (
-        "You are an expert hybrid research system. You have been provided with both internal document "
-        "knowledge base excerpts and real-time external web search results.\n\n"
-        "Synthesize a clear, detailed, and comprehensive response. Clearly distinguish between "
-        "insights gathered from internal documents versus live web sources.\n\n"
-        f"=== INTERNAL DOCUMENTS ===\n{formatted_doc_context if formatted_doc_context else 'No internal documents found.'}\n\n"
-        f"=== EXTERNAL LIVE WEB RESULTS ===\n{formatted_web_context if formatted_web_context else 'No external web results found.'}"
-    )
-
-    prompt_messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
-
-    response = llm.invoke(prompt_messages)
-
+    context = _append_context(state, mode="general", answer=response.content)
     return {
         "messages": [response],
         "final_answer": response.content,
-        "retrieved_docs": retrieved_docs_metadata,
-        "search_results": search_results,
-        "citations": citations
+        "query": query,
+        "route": "general",
+        "route_decision": "general",
+        "context": context,
+    }
+
+
+def synthesis_node(state: AgentState) -> Dict[str, Any]:
+    """Synthesize a grounded answer from retrieved context and citations."""
+    logger.info("Executing synthesis_node")
+    query = _query_from_state(state)
+    route = state.get("route") or state.get("route_decision") or "general"
+    context = state.get("context", {})
+    context_text = context.get("context_text", "")
+
+    if not context_text:
+        fallback_answer = state.get("final_answer") or context.get("error") or "No retrieval context was available for synthesis."
+        return {
+            "messages": [AIMessage(content=fallback_answer)],
+            "final_answer": fallback_answer,
+            "query": query,
+            "route": route,
+            "route_decision": route,
+            "citations": dedupe_citations(state.get("citations", [])),
+            "context": _append_context(state, answer=fallback_answer),
+        }
+
+    citations = dedupe_citations(state.get("citations", []))
+    citation_lines = []
+    for index, citation in enumerate(citations, start=1):
+        citation_lines.append(
+            f"[{index}] source={citation.get('source', '')}; url={citation.get('url', '')}; page={citation.get('page')}"
+        )
+
+    system_prompt = (
+        "You are a senior research assistant. Use only the provided context to answer the query. "
+        "If the context is insufficient, say so clearly. "
+        "When relevant, refer to the numbered citations in your answer.\n\n"
+        f"Route: {route}\n"
+        f"Context:\n{context_text}\n\n"
+        f"Citations:\n{chr(10).join(citation_lines) if citation_lines else 'None'}"
+    )
+
+    try:
+        llm = get_llm()
+        response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=query)])
+    except Exception as exc:
+        logger.exception("Synthesis failed: %s", exc)
+        return _error_message("I could not synthesize an answer from the retrieved context.", route)
+
+    updated_context = _append_context(state, answer=response.content)
+    return {
+        "messages": [response],
+        "final_answer": response.content,
+        "query": query,
+        "route": route,
+        "route_decision": route,
+        "citations": citations,
+        "context": updated_context,
     }

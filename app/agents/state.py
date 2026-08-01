@@ -1,23 +1,27 @@
-from typing import TypedDict, List, Dict, Any, Optional, Annotated
+"""Shared LangGraph state definitions."""
+
+from __future__ import annotations
+
 import operator
+from typing import Any, Annotated, Dict, List, NotRequired, TypedDict
+
 from langchain_core.messages import BaseMessage
 
 
-class AgentState(TypedDict):
-    """Represents the shared state of the LangGraph execution flow."""
+class AgentState(TypedDict, total=False):
+    """Shared state for the research assistant graph."""
 
-    # Chat history and messages
     messages: Annotated[List[BaseMessage], operator.add]
-    
-    # Query details
-    user_query: str
-    route_decision: Optional[str]
-    
-    # Context collected during execution
-    retrieved_docs: List[Dict[str, Any]]
-    search_results: List[Dict[str, Any]]
-    url_content: Optional[str]
-    
-    # Final output
-    final_answer: Optional[str]
-    citations: List[Dict[str, Any]]
+    query: str
+    route: str
+    context: Dict[str, Any]
+    citations: Annotated[List[Dict[str, Any]], operator.add]
+    thread_id: str
+
+    # Backward-compatible fields used by existing service code.
+    user_query: NotRequired[str]
+    route_decision: NotRequired[str]
+    final_answer: NotRequired[str]
+    retrieved_docs: NotRequired[List[Dict[str, Any]]]
+    search_results: NotRequired[List[Dict[str, Any]]]
+    url_content: NotRequired[str]

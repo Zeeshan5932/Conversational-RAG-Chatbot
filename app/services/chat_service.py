@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any, Dict, List
 from langchain_core.messages import HumanMessage
 from app.agents.graph import agent_graph
 from app.utils.logger import logger
@@ -13,13 +13,13 @@ class ChatService:
 
         initial_state = {
             "messages": [HumanMessage(content=message)],
+            "query": message,
             "user_query": message,
+            "route": "",
             "route_decision": "",
-            "retrieved_docs": [],
-            "search_results": [],
-            "url_content": "",
-            "final_answer": "",
-            "citations": []
+            "context": {},
+            "citations": [],
+            "thread_id": thread_id,
         }
 
         # Session configuration for thread persistence
@@ -32,14 +32,17 @@ class ChatService:
         citations = output_state.get("citations", [])
         if not citations and output_state.get("retrieved_docs"):
             citations = [
-                {"source": d.get("source"), "page": d.get("page")}
+                {"url": "", "source": d.get("source", ""), "page": d.get("page")}
                 for d in output_state.get("retrieved_docs", [])
             ]
 
+        context = output_state.get("context", {}) or {}
+        docs_retrieved: List[Dict[str, Any]] = output_state.get("retrieved_docs", []) or context.get("documents", []) or []
+
         return {
             "answer": output_state.get("final_answer", "No answer generated."),
-            "route_used": output_state.get("route_decision", "unknown"),
-            "docs_retrieved": output_state.get("retrieved_docs", []),
-            "search_results": output_state.get("search_results", []),
+            "route_used": output_state.get("route") or output_state.get("route_decision", "unknown"),
+            "docs_retrieved": docs_retrieved,
+            "search_results": output_state.get("search_results", []) or context.get("web_results", []),
             "citations": citations
         }

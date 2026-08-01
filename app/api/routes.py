@@ -53,7 +53,7 @@ async def health_check():
     return HealthCheckResponse(
         status="healthy",
         environment=settings.APP_ENV,
-        model=settings.GEMINI_MODEL
+        model=settings.LLM_MODEL
     )
 
 
