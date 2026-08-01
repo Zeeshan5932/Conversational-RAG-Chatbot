@@ -1,6 +1,7 @@
 langchain
 langchain-groq
 langchain-community
+langchain-google-genai
 langchain-openai
 langgraph
 

@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🤖 AI Research Assistant")
+st.title("🤖 RAGentic AI")
 st.caption("Conversational RAG & Web Search Engine")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
