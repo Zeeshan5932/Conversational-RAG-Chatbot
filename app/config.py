@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     FIRECRAWL_API_KEY: Optional[str] = None
 
     # Model Specifications
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     EMBEDDING_MODEL: str = "models/text-embedding-004"
 
     # Application Parameters
