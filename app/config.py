@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Model Specifications
     LLM_MODEL: str = "llama-3.3-70b-versatile"
-    EMBEDDING_MODEL: str = "models/text-embedding-004"
+    EMBEDDING_MODEL: str = "text-embedding-004"
     MAX_TOKENS: int = 2048
     # Application Parameters
     APP_ENV: str = "development"
