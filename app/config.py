@@ -10,13 +10,14 @@ class Settings(BaseSettings):
 
     # API Keys
     GOOGLE_API_KEY: str
+    GROQ_API_KEY: str
     TAVILY_API_KEY: Optional[str] = None
     FIRECRAWL_API_KEY: Optional[str] = None
 
     # Model Specifications
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
     EMBEDDING_MODEL: str = "models/text-embedding-004"
-
+    MAX_TOKENS: int = 2048
     # Application Parameters
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
