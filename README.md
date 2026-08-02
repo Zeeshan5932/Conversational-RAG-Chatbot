@@ -116,7 +116,7 @@ CHROMA_PERSIST_DIR=./data/chroma_db
 ### Start the Backend (FastAPI)
 
 ```bash
-python main.py
+uvicorn main:app --reload
 # Server will run on http://localhost:8000
 
 ```
