@@ -24,8 +24,7 @@ def render_sidebar(backend_url: str):
         uploaded_file = st.file_uploader(
             "Upload PDF, DOCX, TXT, PPT, or PPTX",
             type=["pdf", "docx", "txt","ppt", "pptx"],
-            help="Uploaded documents will be chunked and indexed into ChromaDB for RAG retrieval.",
-            accept_multiple_files=True
+            help="Uploaded documents will be chunked and indexed into ChromaDB for RAG retrieval."
         )
 
         if uploaded_file is not None:
