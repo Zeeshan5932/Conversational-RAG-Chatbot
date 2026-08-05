@@ -9,6 +9,7 @@ from app.agents.nodes import general_llm_node, rag_node, synthesis_node, url_rea
 from app.agents.router import router_node
 from app.agents.state import AgentState
 from app.utils.logger import logger
+from app.memory.conversation import memory_checkpointer
 
 
 def route_decision_edge(state: AgentState) -> str:
